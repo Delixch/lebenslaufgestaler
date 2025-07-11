@@ -50,6 +50,7 @@ const App = () => {
   const previewRef = useRef(null);
   const [activeView, setActiveView] = useState('editor'); // 'editor' or 'preview'
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     const body = document.body;
@@ -108,31 +109,59 @@ const App = () => {
   };
 
   const handleExportPdf = () => {
-    const input = previewRef.current;
-    const isMobile = window.innerWidth <= 992;
-    // Use a smaller scale on mobile to improve performance and prevent crashes.
-    const canvasScale = isMobile ? 2 : 3;
+    if (isExporting) return;
+    setIsExporting(true);
 
-    html2canvas(input, { scale: canvasScale }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'in',
-        format: 'letter'
-      });
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-      
-      if (isMobile) {
-        // For mobile devices, open the PDF in a new window.
-        // The user can then use the browser's tools to save or print it.
-        pdf.output('dataurlnewwindow');
-      } else {
-        // For desktop, trigger a direct download.
-        pdf.save("lebenslauf.pdf");
-      }
-    });
+    const input = previewRef.current;
+    
+    // Use a small timeout to allow the UI to update to the loading state
+    // before the potentially blocking html2canvas operation begins.
+    setTimeout(() => {
+        const isMobile = window.innerWidth <= 992;
+        const canvasScale = 2;
+
+        html2canvas(input, { 
+          scale: canvasScale,
+          useCORS: true // Necessary for external images
+        }).then((canvas) => {
+          const imgData = canvas.toDataURL('image/png');
+          const pdf = new jsPDF({
+            orientation: 'portrait',
+            unit: 'in',
+            format: 'letter'
+          });
+          const pdfWidth = pdf.internal.pageSize.getWidth();
+          const pdfHeight = pdf.internal.pageSize.getHeight();
+          pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
+          
+          if (isMobile) {
+            // On mobile devices, `pdf.save()` often fails. The most reliable method is to create 
+            // a blob and simulate a click on a download link.
+            try {
+                const blob = pdf.output('blob');
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'lebenslauf.pdf';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                // Clean up the object URL after a short delay.
+                setTimeout(() => URL.revokeObjectURL(link.href), 100);
+            } catch (error) {
+                console.error("Failed to generate PDF on mobile:", error);
+                alert("Could not generate PDF. Please try again.");
+            }
+          } else {
+            // For desktop, trigger a direct download.
+            pdf.save("lebenslauf.pdf");
+          }
+        }).catch(err => {
+            console.error("Error during PDF generation:", err);
+            alert("An error occurred while creating the PDF. The resume might contain content that could not be processed.");
+        }).finally(() => {
+            setIsExporting(false);
+        });
+    }, 50);
   };
   
   const handleFocus = (e, section, field = null, id = null) => {
@@ -345,7 +374,9 @@ const App = () => {
           </div>
         </div>
         <div className={`preview-container ${activeView !== 'preview' ? 'hidden-on-mobile' : ''}`}>
-          <button className="export-btn" onClick={handleExportPdf}>Export to PDF</button>
+          <button className="export-btn" onClick={handleExportPdf} disabled={isExporting}>
+            {isExporting ? 'Generiere PDF...' : 'Export to PDF'}
+          </button>
           <div 
             className="preview" 
             ref={previewRef}
