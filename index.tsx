@@ -87,7 +87,7 @@ const App = () => {
       ...(section === 'education' && { school: '', location: '', degree: '', startDate: '', endDate: '', isCurrent: false, description: '' }),
       ...(section === 'experience' && { company: '', location: '', position: '', startDate: '', endDate: '', isCurrent: false, tasks: '' }),
       ...(section === 'languages' && { name: '', level: 'A1' }),
-      ...(section === 'hobbies' && { name: '', icon: '✨' }),
+      ...(section === 'hobbies' && { name: '', icon: '✨' })
     };
     setData(prev => ({ ...prev, [section]: [...prev[section], newItem] }));
   };
@@ -109,8 +109,11 @@ const App = () => {
 
   const handleExportPdf = () => {
     const input = previewRef.current;
-    
-    html2canvas(input, { scale: 3 }).then((canvas) => {
+    const isMobile = window.innerWidth <= 992;
+    // Use a smaller scale on mobile to improve performance and prevent crashes.
+    const canvasScale = isMobile ? 2 : 3;
+
+    html2canvas(input, { scale: canvasScale }).then((canvas) => {
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF({
         orientation: 'portrait',
@@ -120,7 +123,15 @@ const App = () => {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = pdf.internal.pageSize.getHeight();
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight, undefined, 'FAST');
-      pdf.save("lebenslauf.pdf");
+      
+      if (isMobile) {
+        // For mobile devices, open the PDF in a new window.
+        // The user can then use the browser's tools to save or print it.
+        pdf.output('dataurlnewwindow');
+      } else {
+        // For desktop, trigger a direct download.
+        pdf.save("lebenslauf.pdf");
+      }
     });
   };
   
@@ -162,7 +173,7 @@ const App = () => {
     { id: 'experience-section', label: 'Berufserfahrung' },
     { id: 'competences-section', label: 'Kompetenzen' },
     { id: 'languages-section', label: 'Sprachen' },
-    { id: 'hobbies-section', label: 'Hobbys' },
+    { id: 'hobbies-section', label: 'Hobbys' }
   ];
 
   const handleMenuClick = (targetId) => {
